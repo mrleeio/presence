@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  BLE presence detection for Slack
+
+Parameters:
+  PresenceSlackToken:
+    Type: String
+    Description: OAuth token for the presence Slack app
+  PresenceSlackChannel:
+    Type: String
+    Default: wheres-waldo
+    Description: Slack channel to post presence message
+
+Globals:
+  Function:
+    Timeout: 5
+
+Resources:
+  PresenceIoTThing:
+    Type: AWS::IoT::Thing
+    Properties:
+      ThingName: presence-beacon
+
+  PresenceIoTPolicy:
+    Type: AWS::IoT::Policy
+    DependsOn: PresenceIoTThing
+    Properties:
+      PolicyName: presence-beacon-policy
+      PolicyDocument: 
+        Version: 2012-10-17
+        Statement: 
+          - 
+            Effect: Allow
+            Action: 
+              - "iot:*"
+            Resource: 
+              - "*"
+
+  PresenceIoTPrincipalAttachment:
+    Type: AWS::IoT::PolicyPrincipalAttachment
+    DependsOn: 
+      - PresenceIoTThing
+      - PresenceIoTPolicy
+    Properties:
+      PolicyName: presence-beacon-policy
+      Principal: arn:aws:iot:us-west-2:008363623221:cert/c14dbd72d4326ecc5b60b07c49b983d0dac0654ed062fb12ed3e7afc4e020daa
+
+  PresenceIoTThingPrincipalAttachment:
+    Type: AWS::IoT::ThingPrincipalAttachment
+    DependsOn: PresenceIoTThing
+    Properties:
+      ThingName: presence-beacon
+      Principal: arn:aws:iot:us-west-2:008363623221:cert/c14dbd72d4326ecc5b60b07c49b983d0dac0654ed062fb12ed3e7afc4e020daa
+
+  PresenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: presence/
+      Handler: presence
+      Runtime: go1.x
+      Tracing: Active
+      Policies:
+        - AWSLambdaExecute
+      Events: 
+        IoT: 
+          Type: IoTRule
+          Properties: 
+            AwsIotSqlVersion: 2016-03-23
+            Sql: "SELECT * FROM 'monitor/raspberrypi/+'"
+      Environment:
+        Variables:
+          SLACK_OAUTH_TOKEN: !Ref PresenceSlackToken
+          SLACK_CHANNEL: !Ref PresenceSlackChannel
+
+Outputs:
+  PresenceFunction:
+    Description: "First Lambda Function ARN"
+    Value: !GetAtt PresenceFunction.Arn
+
+  PresenceFunctionIamRole:
+    Description: "Implicit IAM Role created for Presence function"
+    Value: !GetAtt PresenceFunctionRole.Arn

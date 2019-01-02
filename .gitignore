@@ -1,0 +1,5 @@
+# Ignore built executable
+presence/presence
+
+# Ignore SAM package
+packaged.yaml
